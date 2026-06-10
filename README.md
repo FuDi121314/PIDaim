@@ -1,2 +1,2 @@
 # PIDaim
-aim
+use pid to aim
