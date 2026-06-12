@@ -1,8 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <random>
-#include <chrono>
-#include <thread>
 #include <windows.h>
 
 
