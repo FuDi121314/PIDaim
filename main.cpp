@@ -33,6 +33,7 @@ public:
         double derivative = (error - prev_error) / dt;
         double output = kp * error + ki * integral + kd * derivative;
         prev_error = error;
+        std::cout << "PID Update - Error: " << error << " Integral: " << integral << " Derivative: " << derivative << " Output: " << output << std::endl;
         return output;
     }
 
@@ -204,8 +205,12 @@ int main() {
     Sleep(300);
 
     // PID init
-    PID pid(100, 0, 32.5, 1.0/60.0);
-    loadConfig(pid);
+    PID pidx(100, 0, 32.5, 1.0/60.0);
+    PID pidy(100, 0, 32.5, 1.0/60.0);
+    loadConfig(pidx); // Load config for X-axis PID
+    loadConfig(pidy); // Load config for Y-axis PID
+    // x,y share same config file for simplicity, but could be separated if desired
+
 
     // Flags
     bool autoAimEnabled = true;
@@ -216,9 +221,9 @@ int main() {
     // Trackbars for Kp, Ki, Kd (range 0..10000 with decimal precision)
     cv::namedWindow("PID Control", cv::WINDOW_NORMAL);
     cv::resizeWindow("PID Control", 500, 300);
-    int kp_slider = static_cast<int>(pid.kp * 100);
-    int ki_slider = static_cast<int>(pid.ki * 100);
-    int kd_slider = static_cast<int>(pid.kd * 100);
+    int kp_slider = static_cast<int>(pidx.kp * 100);
+    int ki_slider = static_cast<int>(pidx.ki * 100);
+    int kd_slider = static_cast<int>(pidx.kd * 100);
     cv::createTrackbar("Kp (x100)", "PID Control", &kp_slider, 100000, nullptr);
     cv::createTrackbar("Ki (x100)", "PID Control", &ki_slider, 100000, nullptr);
     cv::createTrackbar("Kd (x100)", "PID Control", &kd_slider, 100000, nullptr);
@@ -236,12 +241,25 @@ int main() {
     bool running = true;
     bool lastT=false, lastS=false, lastX=false, lastC=false, lastL=false, lastQ=false, lastP=false, lastD=false, lastR=false;
     int frameCounter = 0;
+    double judge = 100;
 
+    //std::openfile("judge.txt");
+    if (std::ifstream("judge.txt")) {
+        std::ifstream infile("judge.txt");
+                infile >> judge;
+                infile.close();
+    } else {
+        std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
+    }
     while (running) {
         // Update PID from trackbars
-        pid.kp = kp_slider / 100.0;
-        pid.ki = ki_slider / 100.0;
-        pid.kd = kd_slider / 100.0;
+        pidx.kp = kp_slider / 100.0;
+        pidx.ki = ki_slider / 100.0;
+        pidx.kd = kd_slider / 100.0;
+
+        pidy.kp = pidx.kp;
+        pidy.ki = pidx.ki; 
+        pidy.kd = pidx.kd;
 
         auto start = std::chrono::steady_clock::now();
 
@@ -276,16 +294,7 @@ int main() {
             GetWindowRect(gameWnd, &winRect);
             int targetScreenX = winRect.left + target.x;
             int targetScreenY = winRect.top + target.y;
-            double judge = 100;
-
-            //std::openfile("judge.txt");
-            if (std::ifstream("judge.txt")) {
-                std::ifstream infile("judge.txt");
-                infile >> judge;
-                infile.close();
-            } else {
-                std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
-            }
+            
 
             double errorX = (mousePos.x - target.x)/judge;
             double errorY = (mousePos.y - target.y)/judge;
@@ -298,8 +307,8 @@ int main() {
 
             
             if (std::abs(errorX) < 50000 && std::abs(errorY) < 50000) {
-                double moveX = pid.update(0, errorX);
-                double moveY = pid.update(0, errorY);
+                double moveX = pidx.update(0, errorX);
+                double moveY = pidy.update(0, errorY);
                 //const int MAX_MOVE = 25;
                 //if (moveX > MAX_MOVE) moveX = MAX_MOVE;
                 //if (moveX < -MAX_MOVE) moveX = -MAX_MOVE;
@@ -316,10 +325,12 @@ int main() {
                 } 
             } else {
                 if (debugMode) std::cout << "Error too large, skipping movement.\n";
-                pid.reset();
+                pidx.reset();
+                pidy.reset();
             }
         } else {
-            pid.reset();
+            pidx.reset();
+            pidy.reset();
         }
 
         // Monitor display
@@ -340,8 +351,9 @@ int main() {
         cv::putText(monitor, status, cv::Point(10, 60),
                     cv::FONT_HERSHEY_SIMPLEX, 0.6,
                     (autoAimEnabled && pidRunning) ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), 2);
-        char pidText[120];
-        sprintf(pidText, "Kp = %.2f   Ki = %.4f   Kd = %.2f", pid.kp, pid.ki, pid.kd);
+        char pidText[240];
+        sprintf(pidText, "X: Kp=%.2f Ki=%.4f Kd=%.2f   Y: Kp=%.2f Ki=%.4f Kd=%.2f",
+            pidx.kp, pidx.ki, pidx.kd, pidy.kp, pidy.ki, pidy.kd);
         cv::putText(monitor, pidText, cv::Point(10, 90),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 1);
         cv::imshow("Auto-Aim Monitor", monitor);
@@ -359,23 +371,27 @@ int main() {
         bool nowR = isKeyPressed('R');
 
         if (nowT && !lastT) autoAimEnabled = !autoAimEnabled;
-        if (nowS && !lastS) { pidRunning = true; pid.reset(); }
-        if (nowX && !lastX) { pidRunning = false; pid.reset(); }
-        if (nowC && !lastC) saveConfig(pid);
+        if (nowS && !lastS) { pidRunning = true; pidx.reset(); pidy.reset(); }
+        if (nowX && !lastX) { pidRunning = false; pidx.reset(); pidy.reset(); }
+        if (nowC && !lastC) saveConfig(pidx);
         if (nowL && !lastL) {
-            loadConfig(pid);
-            kp_slider = static_cast<int>(pid.kp * 100);
-            ki_slider = static_cast<int>(pid.ki * 100);
-            kd_slider = static_cast<int>(pid.kd * 100);
+            // Load config into both controllers (shared config file)
+            loadConfig(pidx);
+            loadConfig(pidy);
+            kp_slider = static_cast<int>(pidx.kp * 100);
+            ki_slider = static_cast<int>(pidx.ki * 100);
+            kd_slider = static_cast<int>(pidx.kd * 100);
             cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
             cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
             cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
         }
         if (nowP && !lastP) {
-            inputPIDFromConsole(pid);
-            kp_slider = static_cast<int>(pid.kp * 100);
-            ki_slider = static_cast<int>(pid.ki * 100);
-            kd_slider = static_cast<int>(pid.kd * 100);
+            // Input gains for X and copy to Y so both stay consistent
+            inputPIDFromConsole(pidx);
+            pidy.kp = pidx.kp; pidy.ki = pidx.ki; pidy.kd = pidx.kd;
+            kp_slider = static_cast<int>(pidx.kp * 100);
+            ki_slider = static_cast<int>(pidx.ki * 100);
+            kd_slider = static_cast<int>(pidx.kd * 100);
             cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
             cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
             cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
@@ -399,7 +415,7 @@ int main() {
         double targetTime = 1.0 / 60.0;
         if (elapsed < targetTime) Sleep((targetTime - elapsed) * 1000);
         double dt_actual = elapsed;
-        if (dt_actual > 0 && dt_actual < 0.1) pid.dt = dt_actual;
+        if (dt_actual > 0 && dt_actual < 0.1) { pidx.dt = dt_actual; pidy.dt = dt_actual; }
         frameCounter++;
     }
 
