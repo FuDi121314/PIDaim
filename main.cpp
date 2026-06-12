@@ -33,7 +33,8 @@ public:
         double derivative = (error - prev_error) / dt;
         double output = kp * error + ki * integral + kd * derivative;
         prev_error = error;
-        std::cout << "PID Update - Error: " << error << " Integral: " << integral << " Derivative: " << derivative << " Output: " << output << std::endl;
+        // debug & tst helper
+        //std::cout << "PID Update - Error: " << error << " Integral: " << integral << " Derivative: " << derivative << " Output: " << output << std::endl;
         return output;
     }
 
@@ -55,8 +56,7 @@ void moveMouseRelative(int dx, int dy) {
 }
 
 void mouseClick() {
-    std::cout << "Click!\n";
-    /*
+    //std::cout << "Click!\n";
     INPUT input{0};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
@@ -64,7 +64,7 @@ void mouseClick() {
     Sleep(20);
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(INPUT));
-    */
+    
 
 }
 
@@ -218,15 +218,15 @@ int main() {
     bool autoShoot = true;
     bool debugMode = false;
 
-    // Trackbars for Kp, Ki, Kd (range 0..10000 with decimal precision)
+    // Trackbars for Kp, Ki, Kd (range 0..10000, represents 0.0-100.0 with 0.01 steps)
     cv::namedWindow("PID Control", cv::WINDOW_NORMAL);
     cv::resizeWindow("PID Control", 500, 300);
     int kp_slider = static_cast<int>(pidx.kp * 100);
     int ki_slider = static_cast<int>(pidx.ki * 100);
     int kd_slider = static_cast<int>(pidx.kd * 100);
-    cv::createTrackbar("Kp (x100)", "PID Control", &kp_slider, 100000, nullptr);
-    cv::createTrackbar("Ki (x100)", "PID Control", &ki_slider, 100000, nullptr);
-    cv::createTrackbar("Kd (x100)", "PID Control", &kd_slider, 100000, nullptr);
+    cv::createTrackbar("Kp (0-100)", "PID Control", &kp_slider, 10000, nullptr);
+    cv::createTrackbar("Ki (0-100)", "PID Control", &ki_slider, 10000, nullptr);
+    cv::createTrackbar("Kd (0-100)", "PID Control", &kd_slider, 10000, nullptr);
 
     cv::namedWindow("Auto-Aim Monitor", cv::WINDOW_NORMAL);
     cv::resizeWindow("Auto-Aim Monitor", 640, 480);
@@ -252,7 +252,7 @@ int main() {
         std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
     }
     while (running) {
-        // Update PID from trackbars
+        // Update PID from trackbars (0-10000 represents 0.0-100.0)
         pidx.kp = kp_slider / 100.0;
         pidx.ki = ki_slider / 100.0;
         pidx.kd = kd_slider / 100.0;
@@ -373,7 +373,7 @@ int main() {
         if (nowT && !lastT) autoAimEnabled = !autoAimEnabled;
         if (nowS && !lastS) { pidRunning = true; pidx.reset(); pidy.reset(); }
         if (nowX && !lastX) { pidRunning = false; pidx.reset(); pidy.reset(); }
-        if (nowC && !lastC) saveConfig(pidx);
+        if (nowC && !lastC) saveConfig(pidx);       // shared, not need to save twice
         if (nowL && !lastL) {
             // Load config into both controllers (shared config file)
             loadConfig(pidx);
@@ -381,9 +381,9 @@ int main() {
             kp_slider = static_cast<int>(pidx.kp * 100);
             ki_slider = static_cast<int>(pidx.ki * 100);
             kd_slider = static_cast<int>(pidx.kd * 100);
-            cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
-            cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
-            cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
+            cv::setTrackbarPos("Kp (0-100)", "PID Control", kp_slider);
+            cv::setTrackbarPos("Ki (0-100)", "PID Control", ki_slider);
+            cv::setTrackbarPos("Kd (0-100)", "PID Control", kd_slider);
         }
         if (nowP && !lastP) {
             // Input gains for X and copy to Y so both stay consistent
@@ -392,9 +392,9 @@ int main() {
             kp_slider = static_cast<int>(pidx.kp * 100);
             ki_slider = static_cast<int>(pidx.ki * 100);
             kd_slider = static_cast<int>(pidx.kd * 100);
-            cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
-            cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
-            cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
+            cv::setTrackbarPos("Kp (0-100)", "PID Control", kp_slider);
+            cv::setTrackbarPos("Ki (0-100)", "PID Control", ki_slider);
+            cv::setTrackbarPos("Kd (0-100)", "PID Control", kd_slider);
         }
         if (nowD && !lastD) {
             debugMode = !debugMode;
