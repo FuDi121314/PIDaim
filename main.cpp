@@ -9,37 +9,41 @@
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include <sstream>
+#include <conio.h>   
 
 bool g_running = true;
 
-class PID{
+class PID {
 public:
     double kp, ki, kd;
-    double prev_error=0, integral=0;
+    double prev_error = 0;
+    double integral = 0;
     double dt;
 
-    // construct 
-    PID(double p, double i, double d, double time_step) : kp(p), ki(i), kd(d), dt(time_step) {}
+    PID(double p, double i, double d, double time_step)
+        : kp(p), ki(i), kd(d), dt(time_step) {}
 
-    //graph
     double update(double setpoint, double measurement) {
         double error = setpoint - measurement;
         integral += error * dt;
+        const double INTEGRAL_LIMIT = 10000.0;
+        if (integral > INTEGRAL_LIMIT) integral = INTEGRAL_LIMIT;
+        if (integral < -INTEGRAL_LIMIT) integral = -INTEGRAL_LIMIT;
         double derivative = (error - prev_error) / dt;
         double output = kp * error + ki * integral + kd * derivative;
         prev_error = error;
         return output;
     }
 
-    //reset
     void reset() {
         prev_error = 0;
         integral = 0;
     }
-
 };
 
-///////
+
+// Mouse control
 void moveMouseRelative(int dx, int dy) {
     INPUT input{0};
     input.type = INPUT_MOUSE;
@@ -50,6 +54,8 @@ void moveMouseRelative(int dx, int dy) {
 }
 
 void mouseClick() {
+    std::cout << "Click!\n";
+    /*
     INPUT input{0};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
@@ -57,48 +63,11 @@ void mouseClick() {
     Sleep(20);
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(INPUT));
+    */
+
 }
 
-
-struct Detection {
-    cv::Rect box;
-    float confidence;
-};
-
-
-cv::Point findRedCircle(const cv::Mat& frame) {
-    cv::Mat hsv;
-    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
-
-    // Red color has two ranges in HSV (wraps around 0)
-    cv::Mat mask1, mask2;
-    cv::inRange(hsv, cv::Scalar(0, 70, 50), cv::Scalar(10, 255, 255), mask1);
-    cv::inRange(hsv, cv::Scalar(170, 70, 50), cv::Scalar(180, 255, 255), mask2);
-    cv::Mat mask = mask1 | mask2;
-
-    // Morphological cleanup
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5,5));
-    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
-    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
-
-    // Find contours
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-    if (contours.empty()) return cv::Point(-1, -1);
-
-    // Find largest contour (the circle)
-    auto largest = std::max_element(contours.begin(), contours.end(),
-        [](const auto& a, const auto& b) { return cv::contourArea(a) < cv::contourArea(b); });
-
-    cv::Moments m = cv::moments(*largest);
-    if (m.m00 == 0) return cv::Point(-1, -1);
-    int cx = static_cast<int>(m.m10 / m.m00);
-    int cy = static_cast<int>(m.m01 / m.m00);
-    return cv::Point(cx, cy);
-}
-
-
+// Screen capture (BitBlt)
 cv::Mat captureWindow(HWND hwnd) {
     RECT rect;
     GetClientRect(hwnd, &rect);
@@ -106,6 +75,14 @@ cv::Mat captureWindow(HWND hwnd) {
     ClientToScreen(hwnd, &pt);
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
+
+    if (width <= 0 || height <= 0) {
+        GetWindowRect(hwnd, &rect);
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+        pt.x = rect.left;
+        pt.y = rect.top;
+    }
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
@@ -132,109 +109,298 @@ cv::Mat captureWindow(HWND hwnd) {
     return bgr;
 }
 
+// Find target
+cv::Point findtg(const cv::Mat& frame) {
+    cv::Mat mask;
+    cv::inRange(frame, cv::Scalar(0, 0, 200), cv::Scalar(50, 50, 255), mask);
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5,5));
+    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
+    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
 
-int main(){
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    if (contours.empty()) return cv::Point(-1, -1);
 
- HWND gameWnd = FindWindow(NULL, "Shooting Game");
+    auto largest = std::max_element(contours.begin(), contours.end(),
+        [](const auto& a, const auto& b) { return cv::contourArea(a) < cv::contourArea(b); });
+    cv::Moments m = cv::moments(*largest);
+    if (m.m00 == 0) return cv::Point(-1, -1);
+    int cx = static_cast<int>(m.m10 / m.m00);
+    int cy = static_cast<int>(m.m01 / m.m00);
+    if (cx < 10 || cy < 10 || cx > frame.cols - 10 || cy > frame.rows - 10)
+        return cv::Point(-1, -1);
+    return cv::Point(cx, cy);
+}
+
+// Save/Load config
+void saveConfig(const PID& pid, const std::string& filename = "pid_config.txt") {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        file << pid.kp << " " << pid.ki << " " << pid.kd;
+        file.close();
+        std::cout << "Config saved (Kp=" << pid.kp << ", Ki=" << pid.ki << ", Kd=" << pid.kd << ")" << std::endl;
+    } else {
+        std::cerr << "Failed to save config!" << std::endl;
+    }
+}
+
+void loadConfig(PID& pid, const std::string& filename = "pid_config.txt") {
+    std::ifstream file(filename);
+    if (file.is_open()) {
+        file >> pid.kp >> pid.ki >> pid.kd;
+        file.close();
+        std::cout << "Loaded PID: Kp=" << pid.kp << " Ki=" << pid.ki << " Kd=" << pid.kd << std::endl;
+    } else {
+        std::cout << "No saved config, using defaults." << std::endl;
+    }
+}
+
+// Console input for exact double numbers
+void inputPIDFromConsole(PID& pid) {
+    std::cout << "Enter new PID gains (Kp Ki Kd) separated by spaces: ";
+    double kp, ki, kd;
+    std::cin >> kp >> ki >> kd;
+    if (std::cin.fail()) {
+        std::cin.clear();
+        std::cin.ignore(10000, '\n');
+        std::cout << "Invalid input. Gains unchanged." << std::endl;
+    } else {
+        pid.kp = kp;
+        pid.ki = ki;
+        pid.kd = kd;
+        std::cout << "New gains: Kp=" << pid.kp << " Ki=" << pid.ki << " Kd=" << pid.kd << std::endl;
+    }
+}
+
+// Real-time key state check
+bool isKeyPressed(int vkey) {
+    return (GetAsyncKeyState(vkey) & 0x8000) != 0;
+}
+
+// Main
+int main() {
+
+    // win
+    HWND gameWnd = FindWindow(NULL, "Aim");
     if (!gameWnd) {
-        std::cerr << "Shooting Game window not found! Start the game first." << std::endl;
-        std::cerr << "Press any key to exit..." << std::endl;
+        std::cerr << "Aim window not found! Start Base.exe first." << std::endl;
+        std::cout << "Press Enter to exit...";
         std::cin.get();
         return -1;
     }
-    std::cout << "Found Shooting Game window!" << std::endl;
-
-    // Bring window to foreground
     SetForegroundWindow(gameWnd);
     Sleep(500);
 
-    // Get window size
+    // Get initial window rect for center (used only for display)
     RECT rect;
     GetClientRect(gameWnd, &rect);
-    int windowWidth = rect.right - rect.left;
-    int windowHeight = rect.bottom - rect.top;
-    int centerX = windowWidth / 2;
-    int centerY = windowHeight / 2;
+    int centerX = (rect.right - rect.left) / 2;
+    int centerY = (rect.bottom - rect.top) / 2;
 
-    //  PID setup
-    double dt = 1.0 / 60.0;
-    PID pidX(0.025, 0.0001, 0.005, dt);
-    PID pidY(0.025, 0.0001, 0.005, dt);
-    bool autoAimActive = true;
+    // Move mouse to center of game window (good starting point)
+    POINT pt = {0,0};
+    ClientToScreen(gameWnd, &pt);
+    SetCursorPos(pt.x + centerX, pt.y + centerY);
+    Sleep(300);
+
+    // PID init
+    PID pid(100, 0, 32.5, 1.0/60.0);
+    loadConfig(pid);
+
+    // Flags
+    bool autoAimEnabled = true;
+    bool pidRunning = true;
     bool autoShoot = true;
+    bool debugMode = false;
 
-    std::cout << "\n=== Auto-Aim on Shooting Game ===" << std::endl;
-    std::cout << "Auto-aim is ON (press 'Q' in preview window to quit)" << std::endl;
-    std::cout << "The program will move your mouse toward the red circle." << std::endl;
+    // Trackbars for Kp, Ki, Kd (range 0..10000 with decimal precision)
+    cv::namedWindow("PID Control", cv::WINDOW_NORMAL);
+    cv::resizeWindow("PID Control", 500, 300);
+    int kp_slider = static_cast<int>(pid.kp * 100);
+    int ki_slider = static_cast<int>(pid.ki * 100);
+    int kd_slider = static_cast<int>(pid.kd * 100);
+    cv::createTrackbar("Kp (x100)", "PID Control", &kp_slider, 100000, nullptr);
+    cv::createTrackbar("Ki (x100)", "PID Control", &ki_slider, 100000, nullptr);
+    cv::createTrackbar("Kd (x100)", "PID Control", &kd_slider, 100000, nullptr);
 
-    cv::namedWindow("Auto-Aim Preview", cv::WINDOW_NORMAL);
-    cv::resizeWindow("Auto-Aim Preview", 640, 480);
+    cv::namedWindow("Auto-Aim Monitor", cv::WINDOW_NORMAL);
+    cv::resizeWindow("Auto-Aim Monitor", 640, 480);
 
-    while (g_running) {
+    std::cout << "\n=== PID Auto-Aim ===\n";
+    std::cout << "Error = target_screen - mouse_screen\n";
+    std::cout << "Controls:\n";
+    std::cout << "  T - toggle auto-aim\n  S - start PID\n  X - stop PID\n";
+    std::cout << "  R - recalculate window rect\n  P - input PID gains\n";
+    std::cout << "  C - save config\n  L - load config\n  D - debug output\n  Q - quit\n";
+
+    bool running = true;
+    bool lastT=false, lastS=false, lastX=false, lastC=false, lastL=false, lastQ=false, lastP=false, lastD=false, lastR=false;
+    int frameCounter = 0;
+
+    while (running) {
+        // Update PID from trackbars
+        pid.kp = kp_slider / 100.0;
+        pid.ki = ki_slider / 100.0;
+        pid.kd = kd_slider / 100.0;
+
         auto start = std::chrono::steady_clock::now();
 
-        // Capture game window
+        // Get current window rectangle (in case of resize/fullscreen)
+        GetClientRect(gameWnd, &rect);
+        int windowWidth = rect.right - rect.left;
+        int windowHeight = rect.bottom - rect.top;
+        if (windowWidth > 0 && windowHeight > 0) {
+            centerX = windowWidth / 2;
+            centerY = windowHeight / 2;
+        }
+
         cv::Mat frame = captureWindow(gameWnd);
         if (frame.empty()) break;
 
-        // Find red circle
-        cv::Point target = findRedCircle(frame);
-        bool targetFound = (target.x != -1);
+        cv::Point target = findtg(frame);
+        bool targetFound = (target.x != -1 && target.y != -1);
 
-        // Draw detection on preview
-        if (targetFound) {
-            cv::circle(frame, target, 5, cv::Scalar(0, 255, 0), -1);
-            cv::circle(frame, target, 30, cv::Scalar(0, 255, 0), 2);
+        // Debug output
+        if (debugMode && frameCounter % 60 == 0) {
+            std::cout << "Target (window): (" << target.x << "," << target.y << ")  Center: (" << centerX << "," << centerY << ")" << std::endl;
         }
 
-        // Auto-aim logic
-        if (autoAimActive && targetFound) {
-            double errorX = target.x - centerX;
-            double errorY = target.y - centerY;
+        
+        if (autoAimEnabled && pidRunning && targetFound) {
+            // Get current mouse cursor position (screen)
+            POINT mousePos;
+            GetCursorPos(&mousePos);
 
-            double moveX = pidX.update(0, errorX);
-            double moveY = pidY.update(0, errorY);
+            // Convert target (window-relative) to screen coordinates
+            RECT winRect;
+            GetWindowRect(gameWnd, &winRect);
+            int targetScreenX = winRect.left + target.x;
+            int targetScreenY = winRect.top + target.y;
+            double judge = 100;
 
-            const int MAX_MOVE = 25;
-            if (moveX > MAX_MOVE) moveX = MAX_MOVE;
-            if (moveX < -MAX_MOVE) moveX = -MAX_MOVE;
-            if (moveY > MAX_MOVE) moveY = MAX_MOVE;
-            if (moveY < -MAX_MOVE) moveY = -MAX_MOVE;
+            //std::openfile("judge.txt");
+            if (std::ifstream("judge.txt")) {
+                std::ifstream infile("judge.txt");
+                infile >> judge;
+                infile.close();
+            } else {
+                std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
+            }
 
-            moveMouseRelative((int)moveX, (int)moveY);
+            double errorX = (mousePos.x - target.x)/judge;
+            double errorY = (mousePos.y - target.y)/judge;
 
-            // Auto-shoot when close enough
-            if (autoShoot && std::abs(errorX) < 15 && std::abs(errorY) < 15) {
-                mouseClick();
-                Sleep(150);  // debounce
+            if (debugMode && frameCounter % 60 == 0) {
+                std::cout << "Mouse: (" << mousePos.x << "," << mousePos.y << ")  TargetScreen: (" << targetScreenX << "," << targetScreenY << ")" << std::endl;
+                std::cout << "target.x = " << target.x << " target.y = " << target.y << std::endl;
+                std::cout << "Error: (" << errorX << "," << errorY << ")" << std::endl;
+            }
+
+            
+            if (std::abs(errorX) < 50000 && std::abs(errorY) < 50000) {
+                double moveX = pid.update(0, errorX);
+                double moveY = pid.update(0, errorY);
+                //const int MAX_MOVE = 25;
+                //if (moveX > MAX_MOVE) moveX = MAX_MOVE;
+                //if (moveX < -MAX_MOVE) moveX = -MAX_MOVE;
+                //if (moveY > MAX_MOVE) moveY = MAX_MOVE;
+                //if (moveY < -MAX_MOVE) moveY = -MAX_MOVE;
+                moveMouseRelative((int)moveX, (int)moveY);
+                if (debugMode && frameCounter % 60 == 0) {
+                    std::cout << "move.x: "<<moveX << std::endl;
+                    std::cout << "move.y: "<<moveY << std::endl;
+                }
+                if (autoShoot && std::abs(errorX) < 10 && std::abs(errorY) < 10) {
+                    mouseClick();
+                    Sleep(1);
+                } 
+            } else {
+                if (debugMode) std::cout << "Error too large, skipping movement.\n";
+                pid.reset();
             }
         } else {
-            pidX.reset();
-            pidY.reset();
+            pid.reset();
         }
 
-        // Show preview
-        cv::putText(frame, "Auto-Aim: ACTIVE", cv::Point(10, 30),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
-        cv::putText(frame, "Target: " + std::string(targetFound ? "Found" : "Lost"), cv::Point(10, 60),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.6, targetFound ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), 2);
-        cv::imshow("Auto-Aim Preview", frame);
+        // Monitor display
+        cv::Mat monitor = frame.clone();
+        if (targetFound) {
+            cv::circle(monitor, target, 5, cv::Scalar(0, 255, 0), -1);
+            cv::circle(monitor, target, 30, cv::Scalar(0, 255, 0), 2);
+            cv::putText(monitor, "TARGET FOUND", cv::Point(10, 30),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+        } else {
+            cv::putText(monitor, "TARGET LOST", cv::Point(10, 30),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 0, 255), 2);
+        }
+        std::string status;
+        if (!autoAimEnabled) status = "AUTO-AIM: OFF";
+        else if (!pidRunning) status = "PID: STOPPED";
+        else status = "PID: RUNNING";
+        cv::putText(monitor, status, cv::Point(10, 60),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                    (autoAimEnabled && pidRunning) ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), 2);
+        char pidText[120];
+        sprintf(pidText, "Kp = %.2f   Ki = %.4f   Kd = %.2f", pid.kp, pid.ki, pid.kd);
+        cv::putText(monitor, pidText, cv::Point(10, 90),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 1);
+        cv::imshow("Auto-Aim Monitor", monitor);
+        cv::waitKey(1);
 
-        int key = cv::waitKey(1);
-        if (key == 'q' || key == 27) g_running = false;
+        // Keyboard handling
+        bool nowT = isKeyPressed('T');
+        bool nowS = isKeyPressed('S');
+        bool nowX = isKeyPressed('X');
+        bool nowC = isKeyPressed('C');
+        bool nowL = isKeyPressed('L');
+        bool nowQ = isKeyPressed('Q');
+        bool nowP = isKeyPressed('P');
+        bool nowD = isKeyPressed('D');
+        bool nowR = isKeyPressed('R');
 
-        // Maintain ~30 FPS
+        if (nowT && !lastT) autoAimEnabled = !autoAimEnabled;
+        if (nowS && !lastS) { pidRunning = true; pid.reset(); }
+        if (nowX && !lastX) { pidRunning = false; pid.reset(); }
+        if (nowC && !lastC) saveConfig(pid);
+        if (nowL && !lastL) {
+            loadConfig(pid);
+            kp_slider = static_cast<int>(pid.kp * 100);
+            ki_slider = static_cast<int>(pid.ki * 100);
+            kd_slider = static_cast<int>(pid.kd * 100);
+            cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
+            cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
+            cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
+        }
+        if (nowP && !lastP) {
+            inputPIDFromConsole(pid);
+            kp_slider = static_cast<int>(pid.kp * 100);
+            ki_slider = static_cast<int>(pid.ki * 100);
+            kd_slider = static_cast<int>(pid.kd * 100);
+            cv::setTrackbarPos("Kp (x100)", "PID Control", kp_slider);
+            cv::setTrackbarPos("Ki (x100)", "PID Control", ki_slider);
+            cv::setTrackbarPos("Kd (x100)", "PID Control", kd_slider);
+        }
+        if (nowD && !lastD) {
+            debugMode = !debugMode;
+            std::cout << "Debug mode " << (debugMode ? "ON" : "OFF") << std::endl;
+        }
+        if (nowR && !lastR) {
+            GetClientRect(gameWnd, &rect);
+            centerX = (rect.right - rect.left) / 2;
+            centerY = (rect.bottom - rect.top) / 2;
+            std::cout << "Recenter: new window center (" << centerX << "," << centerY << ")" << std::endl;
+        }
+        if (nowQ && !lastQ) running = false;
+
+        lastT=nowT; lastS=nowS; lastX=nowX; lastC=nowC; lastL=nowL; lastQ=nowQ; lastP=nowP; lastD=nowD; lastR=nowR;
+
         auto end = std::chrono::steady_clock::now();
         double elapsed = std::chrono::duration<double>(end - start).count();
-        double targetTime = 1.0 / 30.0;
-        if (elapsed < targetTime) {
-            Sleep((targetTime - elapsed) * 1000);
-        }
+        double targetTime = 1.0 / 60.0;
+        if (elapsed < targetTime) Sleep((targetTime - elapsed) * 1000);
         double dt_actual = elapsed;
-        if (dt_actual > 0 && dt_actual < 0.1) {
-            pidX.dt = dt_actual;
-            pidY.dt = dt_actual;
-        }
+        if (dt_actual > 0 && dt_actual < 0.1) pid.dt = dt_actual;
+        frameCounter++;
     }
 
     cv::destroyAllWindows();
