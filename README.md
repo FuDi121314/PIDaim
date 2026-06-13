@@ -35,7 +35,11 @@ Run "Base" first and then the "AutoAim"
 
 following is a demo of the program (the cursor may be laggy to see)
 or you can goto "/sample/demo.mp4" to see.
-![](sample/demo.mp4)
+<video width="640" height="360" controls>
+  <source src="sample/demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 
 ## customize 
 1) you can change the windows captured
