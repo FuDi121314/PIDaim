@@ -35,10 +35,12 @@ Run "Base" first and then the "AutoAim"
 
 following is a demo of the program (the cursor may be laggy to see)
 or you can goto "/sample/demo.mp4" to see.
-<video width="640" height="360" controls>
-  <source src="sample/demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+<p align="center">
+    <picture>
+      <source srcset="sample/demo.gif" />
+      <img src="sample/demo.gif" />
+  </picture>
+</p>
 
 
 ## customize 
