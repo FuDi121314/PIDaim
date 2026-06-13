@@ -37,7 +37,7 @@ following is a demo of the program (the cursor may be laggy to see)
 or you can goto "/sample/demo.mp4" to see.
 <p align="center">
     <picture>
-      <source media="(prefers-color-scheme: light)" srcset="./doc/images/readme/pt-hero.light.png" />
+      <source srcset="sample/demo.gif" />
       <img src="sample/demo.gif" />
   </picture>
 </p>
