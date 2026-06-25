@@ -27,8 +27,13 @@ cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DOpenCV_DIR="C:/msys64
 ```
 
 use "mingw32-make" in .\build\ to build executable file
-recommand **p: 22.5 i: 15 d: 0.0005** for the base game test.
-after complie the file, 2 files named "Base" and "AutoAim" is created
+```
+cd to\your\path
+cd .\build\
+mingw32-make
+```
+recommend **p: 22.5 i: 15 d: 0.0005** for the base game test.
+after complie the file, 2 files named "Base" and "AutoAim" will be  created
 Run "Base" first and then the "AutoAim"
 
 ## demo
