@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <sstream>
 #include <conio.h>   
+#include <vector>
 
+#include "resource.h"
 bool g_running = true;
 
 class PID {
@@ -178,17 +180,146 @@ bool isKeyPressed(int vkey) {
     return (GetAsyncKeyState(vkey) & 0x8000) != 0;
 }
 
+// This is data structure passed to EnumWindows and the dialog
+struct EnumData {
+    std::vector<HWND> handles;
+    std::vector<std::wstring> titles;
+};
+
+// Callback for EnumWindows 
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    // Skip windows that are hidden or invisible
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE; 
+    }
+
+    // Retrieve the window title length
+    int length = GetWindowTextLength(hwnd);
+    if (length == 0) {
+        return TRUE; 
+    }
+
+    // Allocate a buffer and fetch the title text
+    std::wstring title(length + 1, L'\0');
+    GetWindowTextW(hwnd, &title[0], static_cast<int>(title.size()));
+
+    // Store the HWND in our custom collection passed via lParam
+    auto* windowList = reinterpret_cast<EnumData*>(lParam);
+    windowList->handles.push_back(hwnd);
+    windowList->titles.push_back(title);
+    
+    // Print out the details
+    std::wcout << L"HWND: " << hwnd << L" | Title: " << title.c_str() << std::endl;
+
+    return TRUE; // Return TRUE to keep iterating; FALSE stops the loop
+}
+
+// Dialog procedure for the window picker
+INT_PTR CALLBACK SelectDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    static EnumData* pData = nullptr;
+
+    switch (msg) {
+    case WM_INITDIALOG: {
+        // Store the pointer to the window data
+        pData = reinterpret_cast<EnumData*>(lParam);
+
+        HWND hList = GetDlgItem(hDlg, IDC_LIST_WINDOWS);
+        // Populate the list box with window titles
+        for (const auto& title : pData->titles) {
+            SendMessageW(hList, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(title.c_str()));
+        }
+
+        // Pre-select the first item if any exist
+        if (!pData->titles.empty()) {
+            SendMessage(hList, LB_SETCURSEL, 0, 0);
+        }
+        return TRUE;
+    }
+
+    case WM_COMMAND: {
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            HWND hList = GetDlgItem(hDlg, IDC_LIST_WINDOWS);
+            int idx = static_cast<int>(SendMessage(hList, LB_GETCURSEL, 0, 0));
+
+            if (idx != LB_ERR && pData && idx < static_cast<int>(pData->handles.size())) {
+                // Return the selected HWND
+                EndDialog(hDlg, reinterpret_cast<INT_PTR>(pData->handles[idx]));
+            } else {
+                MessageBoxW(hDlg, L"Please select a window from the list.", L"No Selection", MB_OK | MB_ICONINFORMATION);
+            }
+            return TRUE;
+        }
+
+        case IDCANCEL:
+            EndDialog(hDlg, NULL);  // return 0 (no window selected)
+            return TRUE;
+
+        case IDC_LIST_WINDOWS:
+            if (HIWORD(wParam) == LBN_DBLCLK) {
+                // Double-click acts the same as pressing OK
+                SendMessage(hDlg, WM_COMMAND, MAKEWPARAM(IDOK, 0), 0);
+            }
+            return TRUE;
+        }
+        break;
+    }
+    }
+    return FALSE;
+}
+
+// Function to show the window selection dialog and return the selected HWND
+HWND SelectWindowGUI() {
+    // Enumerate all windows
+    EnumData data;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&data));
+
+    if (data.handles.empty()) {
+        MessageBoxW(NULL, L"No visible windows with titles were found.", L"Error", MB_OK | MB_ICONERROR);
+        return NULL;
+    }
+
+    // Show the modal dialog (blocks until user selects or cancels)
+    INT_PTR result = DialogBoxParamW(
+        GetModuleHandle(NULL),               // instance
+        MAKEINTRESOURCEW(IDD_WINDOW_SELECT),  // dialog resource
+        NULL,                                // parent (no owner)
+        SelectDlgProc,                       // dialog procedure
+        reinterpret_cast<LPARAM>(&data)      // pass the window list
+    );
+
+    // Dialog returns the selected HWND, or NULL if cancelled
+    return reinterpret_cast<HWND>(result);
+}
+
 // Main
 int main() {
 
+    std::vector<HWND> detectedWindows;
+
+    std::cout << "Starting top-level window selection...\n\n";
+
+    // Pass the address of the vector to the callback via LPARAM
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&detectedWindows));
+
+    std::cout << "\nSelection finished. Total windows found: " << detectedWindows.size() << std::endl;
+    
+    system("pause");
     // win
-    HWND gameWnd = FindWindow(NULL, "Aim");
+    HWND gameWnd = SelectWindowGUI();
+    //HWND gameWnd = FindWindow(NULL, "Aim");         //replace findwindow
+    /*
     if (!gameWnd) {
         std::cerr << "Aim window not found! Start Base.exe first." << std::endl;
         std::cout << "Press Enter to exit...";
         std::cin.get();
         return -1;
+    }*/
+   if (gameWnd == NULL) {
+        std::cout << "No window selected. Exiting." << std::endl;
+        return 0;
     }
+    std::wcout << L"Selected window HWND: " << gameWnd << std::endl;
     SetForegroundWindow(gameWnd);
     Sleep(500);
 

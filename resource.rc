@@ -1,0 +1,12 @@
+#include "resource.h"
+#include <windows.h>
+
+IDD_WINDOW_SELECT DIALOGEX 0, 0, 320, 210
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Select a Window"
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    LISTBOX         IDC_LIST_WINDOWS, 10, 10, 300, 150, LBS_NOTIFY | WS_VSCROLL | WS_BORDER
+    DEFPUSHBUTTON   "OK",      IDOK,     110, 175, 45, 20
+    PUSHBUTTON      "Cancel",  IDCANCEL, 165, 175, 45, 20
+END
