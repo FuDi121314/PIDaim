@@ -347,10 +347,11 @@ int main() {
 
 
     // Flags
-    bool autoAimEnabled = true;
+    bool autoAimEnabled = false;
     bool pidRunning = true;
     bool autoShoot = true;
     bool debugMode = false;
+    bool fixmouse = false;      // fixmouse at center of window
 
     // Trackbars for Kp, Ki, Kd (range 0..10000, represents 0.0-100.0 with 0.01 steps)
     cv::namedWindow("PID Control", cv::WINDOW_NORMAL);
@@ -371,9 +372,10 @@ int main() {
     std::cout << "  T - toggle auto-aim\n  S - start PID\n  X - stop PID\n";
     std::cout << "  R - recalculate window rect\n  P - input PID gains\n";
     std::cout << "  C - save config\n  L - load config\n  D - debug output\n  Q - quit\n";
+    std::cout << "  O - fix mouse at center\n";
 
     bool running = true;
-    bool lastT=false, lastS=false, lastX=false, lastC=false, lastL=false, lastQ=false, lastP=false, lastD=false, lastR=false;
+    bool lastT=false, lastS=false, lastX=false, lastC=false, lastL=false, lastQ=false, lastP=false, lastD=false, lastR=false, lastO=false;
     int frameCounter = 0;
     double judge = 100;
 
@@ -385,7 +387,7 @@ int main() {
     } else {
         std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
     }
-    while (running) {
+    do{
         // Update PID from trackbars (0-10000 represents 0.0-100.0)
         pidx.kp = kp_slider / 100.0;
         pidx.ki = ki_slider / 100.0;
@@ -429,6 +431,11 @@ int main() {
             int targetScreenX = winRect.left + target.x;
             int targetScreenY = winRect.top + target.y;
             
+            if (fixmouse) {
+                //fix in center
+                mousePos.x = 0.5;
+                mousePos.y = 0.5;
+            }
 
             double errorX = (mousePos.x - target.x)/judge;
             double errorY = (mousePos.y - target.y)/judge;
@@ -485,6 +492,14 @@ int main() {
         cv::putText(monitor, status, cv::Point(10, 60),
                     cv::FONT_HERSHEY_SIMPLEX, 0.6,
                     (autoAimEnabled && pidRunning) ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), 2);
+        if (fixmouse) {
+            cv::putText(monitor, "FIX MOUSE: ON", cv::Point(10, 80),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+        }
+        else {
+            cv::putText(monitor, "FIX MOUSE: OFF", cv::Point(10, 80),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+        }
         char pidText[240];
         sprintf(pidText, "X: Kp=%.2f Ki=%.4f Kd=%.2f   Y: Kp=%.2f Ki=%.4f Kd=%.2f",
             pidx.kp, pidx.ki, pidx.kd, pidy.kp, pidy.ki, pidy.kd);
@@ -503,6 +518,7 @@ int main() {
         bool nowP = isKeyPressed('P');
         bool nowD = isKeyPressed('D');
         bool nowR = isKeyPressed('R');
+        bool nowO = isKeyPressed('O');
 
         if (nowT && !lastT) autoAimEnabled = !autoAimEnabled;
         if (nowS && !lastS) { pidRunning = true; pidx.reset(); pidy.reset(); }
@@ -541,8 +557,11 @@ int main() {
             std::cout << "Recenter: new window center (" << centerX << "," << centerY << ")" << std::endl;
         }
         if (nowQ && !lastQ) running = false;
-
-        lastT=nowT; lastS=nowS; lastX=nowX; lastC=nowC; lastL=nowL; lastQ=nowQ; lastP=nowP; lastD=nowD; lastR=nowR;
+        if (nowO && !lastO) {
+            fixmouse = !fixmouse;
+            std::cout << "Fix mouse at center: " << (fixmouse ? "ON" : "OFF") << std::endl;
+        }
+        lastT=nowT; lastS=nowS; lastX=nowX; lastC=nowC; lastL=nowL; lastQ=nowQ; lastP=nowP; lastD=nowD; lastR=nowR, lastO=nowO;
 
         auto end = std::chrono::steady_clock::now();
         double elapsed = std::chrono::duration<double>(end - start).count();
@@ -551,7 +570,7 @@ int main() {
         double dt_actual = elapsed;
         if (dt_actual > 0 && dt_actual < 0.1) { pidx.dt = dt_actual; pidy.dt = dt_actual; }
         frameCounter++;
-    }
+    } while (running);
 
     cv::destroyAllWindows();
     return 0;
