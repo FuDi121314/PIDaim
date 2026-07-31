@@ -252,7 +252,7 @@ INT_PTR CALLBACK SelectDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam
         }
 
         case IDCANCEL:
-            EndDialog(hDlg, NULL);  // return 0 (no window selected)
+            EndDialog(hDlg, INT_PTR(0));
             return TRUE;
 
         case IDC_LIST_WINDOWS:
@@ -294,21 +294,24 @@ HWND SelectWindowGUI() {
 
 // Main
 int main() {
-
+    /*
     std::vector<HWND> detectedWindows;
 
     std::cout << "Starting top-level window selection...\n\n";
 
-    // Pass the address of the vector to the callback via LPARAM
+     Pass the address of the vector to the callback via LPARAM
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&detectedWindows));
 
     std::cout << "\nSelection finished. Total windows found: " << detectedWindows.size() << std::endl;
     
     system("pause");
+    */
+
     // win
     HWND gameWnd = SelectWindowGUI();
-    //HWND gameWnd = FindWindow(NULL, "Aim");         //replace findwindow
+
     /*
+    //HWND gameWnd = FindWindow(NULL, "Aim");         //replace findwindow
     if (!gameWnd) {
         std::cerr << "Aim window not found! Start Base.exe first." << std::endl;
         std::cout << "Press Enter to exit...";
