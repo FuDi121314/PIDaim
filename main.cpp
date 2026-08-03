@@ -135,6 +135,30 @@ cv::Point findtg(const cv::Mat& frame) {
     return cv::Point(cx, cy);
 }
 
+std::vector<cv::Point> findAllTargets(const cv::Mat& frame) {
+    cv::Mat mask;
+    cv::inRange(frame, cv::Scalar(0, 0, 200), cv::Scalar(50, 50, 255), mask);
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5,5));
+    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
+    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    std::vector<cv::Point> centers;
+    for (const auto& contour : contours) {
+        cv::Moments m = cv::moments(contour);
+        if (m.m00 == 0) continue;
+        int cx = static_cast<int>(m.m10 / m.m00);
+        int cy = static_cast<int>(m.m01 / m.m00);
+        // Ignore points too close to the border (optional)
+        if (cx < 10 || cy < 10 || cx > frame.cols - 10 || cy > frame.rows - 10)
+            continue;
+        centers.push_back(cv::Point(cx, cy));
+    }
+    return centers;
+}
+
 // Save/Load config
 void saveConfig(const PID& pid, const std::string& filename = "pid_config.txt") {
     std::ofstream file(filename);
@@ -353,6 +377,12 @@ int main() {
     bool debugMode = false;
     bool fixmouse = false;      // fixmouse at center of window
 
+    cv::Point lockedTarget(-1, -1);
+    bool hasLock = false;
+    int lostCounter = 0;
+    const int LOST_THRESHOLD = 15;          // frames before unlocking
+    const float DIST_THRESHOLD = 60.0f;     // pixel distance to consider same target
+
     // Trackbars for Kp, Ki, Kd (range 0..10000, represents 0.0-100.0 with 0.01 steps)
     cv::namedWindow("PID Control", cv::WINDOW_NORMAL);
     cv::resizeWindow("PID Control", 500, 300);
@@ -379,6 +409,7 @@ int main() {
     int frameCounter = 0;
     double judge = 100;
 
+    
     //std::openfile("judge.txt");
     if (std::ifstream("judge.txt")) {
         std::ifstream infile("judge.txt");
@@ -387,6 +418,8 @@ int main() {
     } else {
         std::cerr << "Failed to read judge.txt, using default value.\n" << judge << std::endl;
     }
+
+    //loop
     do{
         // Update PID from trackbars (0-10000 represents 0.0-100.0)
         pidx.kp = kp_slider / 100.0;
@@ -411,8 +444,65 @@ int main() {
         cv::Mat frame = captureWindow(gameWnd);
         if (frame.empty()) break;
 
+        /*
         cv::Point target = findtg(frame);
         bool targetFound = (target.x != -1 && target.y != -1);
+        */
+
+        std::vector<cv::Point> candidates = findAllTargets(frame);
+        cv::Point currentTarget(-1, -1);
+        bool targetFound = false;
+
+        if (!candidates.empty()) {
+            if (!hasLock) {
+                // *** No lock: pick an initial target
+                // ***** pick the one closest to the screen center
+                cv::Point center(frame.cols / 2, frame.rows / 2);
+                auto it = std::min_element(candidates.begin(), candidates.end(),
+                    [&center](const cv::Point& a, const cv::Point& b) {
+                        return cv::norm(a - center) < cv::norm(b - center);
+                    });
+                lockedTarget = *it;
+                hasLock = true;
+                lostCounter = 0;
+                currentTarget = lockedTarget;
+                targetFound = true;
+            } 
+            else {
+                // *** Locked: find the candidate closest to lockedTarget 
+                auto it = std::min_element(candidates.begin(), candidates.end(),
+                    [&](const cv::Point& a, const cv::Point& b) {
+                        return cv::norm(a - lockedTarget) < cv::norm(b - lockedTarget);
+                    });
+                float dist = cv::norm(*it - lockedTarget);
+                if (dist < DIST_THRESHOLD) {
+                    // Target still visible, update lock position
+                    lockedTarget = *it;
+                    lostCounter = 0;
+                    currentTarget = lockedTarget;
+                    targetFound = true;
+                } 
+                else {
+                    // Target lost
+                    lostCounter++;
+                    if (lostCounter >= LOST_THRESHOLD) {
+                        hasLock = false;
+                        lockedTarget = cv::Point(-1, -1);
+                    }
+                    // currentTarget remains invalid (targetFound = false)
+                }
+            }
+        } else {
+            // No target at all
+            if (hasLock) {
+                lostCounter++;
+                if (lostCounter >= LOST_THRESHOLD) {
+                    hasLock = false;
+                    lockedTarget = cv::Point(-1, -1);
+                }
+            }
+        }
+        cv::Point target = currentTarget;
 
         // Debug output
         if (debugMode && frameCounter % 60 == 0) {
@@ -570,6 +660,10 @@ int main() {
         double dt_actual = elapsed;
         if (dt_actual > 0 && dt_actual < 0.1) { pidx.dt = dt_actual; pidy.dt = dt_actual; }
         frameCounter++;
+        if (debugMode) {
+        std:: cout << "Frame time: " << elapsed * 1000 << " ms" << std::endl;
+        std::cout << "Frame: " << frameCounter << std::endl;
+        }
     } while (running);
 
     cv::destroyAllWindows();
