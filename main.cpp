@@ -523,8 +523,8 @@ int main() {
             
             if (fixmouse) {
                 //fix in center
-                mousePos.x = 0.5;
-                mousePos.y = 0.5;
+                mousePos.x = 0.5 * (winRect.left + winRect.right);
+                mousePos.y = 0.5 * (winRect.top + winRect.bottom);
             }
 
             double errorX = (mousePos.x - target.x)/judge;
@@ -556,8 +556,8 @@ int main() {
                 } 
             } else {
                 if (debugMode) std::cout << "Error too large, skipping movement.\n";
-                pidx.reset();
-                pidy.reset();
+                    pidx.reset();
+                    pidy.reset();
             }
         } else {
             pidx.reset();
