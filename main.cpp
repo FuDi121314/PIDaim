@@ -570,30 +570,30 @@ int main() {
             cv::circle(monitor, target, 5, cv::Scalar(0, 255, 0), -1);
             cv::circle(monitor, target, 30, cv::Scalar(0, 255, 0), 2);
             cv::putText(monitor, "TARGET FOUND", cv::Point(10, 30),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+                        cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 2);
         } else {
             cv::putText(monitor, "TARGET LOST", cv::Point(10, 30),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 0, 255), 2);
+                        cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
         }
         std::string status;
         if (!autoAimEnabled) status = "AUTO-AIM: OFF";
         else if (!pidRunning) status = "PID: STOPPED";
         else status = "PID: RUNNING";
         cv::putText(monitor, status, cv::Point(10, 60),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                    cv::FONT_HERSHEY_SIMPLEX, 1.2,
                     (autoAimEnabled && pidRunning) ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), 2);
         if (fixmouse) {
-            cv::putText(monitor, "FIX MOUSE: ON", cv::Point(10, 80),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+            cv::putText(monitor, "FIX MOUSE: ON", cv::Point(10, 100),
+                        cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 0), 2);
         }
         else {
-            cv::putText(monitor, "FIX MOUSE: OFF", cv::Point(10, 80),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+            cv::putText(monitor, "FIX MOUSE: OFF", cv::Point(10, 100),
+                        cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 0), 2);
         }
         char pidText[240];
         sprintf(pidText, "X: Kp=%.2f Ki=%.4f Kd=%.2f   Y: Kp=%.2f Ki=%.4f Kd=%.2f",
             pidx.kp, pidx.ki, pidx.kd, pidy.kp, pidy.ki, pidy.kd);
-        cv::putText(monitor, pidText, cv::Point(10, 90),
+        cv::putText(monitor, pidText, cv::Point(10, 120),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 1);
         cv::imshow("Auto-Aim Monitor", monitor);
         cv::waitKey(1);
@@ -661,8 +661,8 @@ int main() {
         if (dt_actual > 0 && dt_actual < 0.1) { pidx.dt = dt_actual; pidy.dt = dt_actual; }
         frameCounter++;
         if (debugMode) {
-        std:: cout << "Frame time: " << elapsed * 1000 << " ms" << std::endl;
-        std::cout << "Frame: " << frameCounter << std::endl;
+            std:: cout << "Frame time: " << elapsed * 1000 << " ms" << std::endl;
+            std::cout << "Frame: " << frameCounter << std::endl;
         }
     } while (running);
 
