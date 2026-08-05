@@ -484,22 +484,33 @@ int main() {
                 } 
                 else {
                     // Target lost
-                    lostCounter++;
+                    hasLock = false;
+                    lockedTarget = cv::Point(-1, -1);
+                    continue;
+                    /*lostCounter++;
                     if (lostCounter >= LOST_THRESHOLD) {
                         hasLock = false;
                         lockedTarget = cv::Point(-1, -1);
-                    }
+                        std::cout << "Target lost after " << lostCounter << " out of " << LOST_THRESHOLD << " frames.\n";
+                        continue;
+                    }*/
                     // currentTarget remains invalid (targetFound = false)
                 }
             }
         } else {
             // No target at all
             if (hasLock) {
+                hasLock = false;
+                lockedTarget = cv::Point(-1, -1);
+                continue;
+                /*
                 lostCounter++;
                 if (lostCounter >= LOST_THRESHOLD) {
                     hasLock = false;
                     lockedTarget = cv::Point(-1, -1);
-                }
+                    std::cout << "Out if :: Target lost after " << lostCounter << " out of " << LOST_THRESHOLD << " frames.\n";
+                    continue;
+                }*/
             }
         }
         cv::Point target = currentTarget;
@@ -552,6 +563,7 @@ int main() {
                 }
                 if (autoShoot && std::abs(errorX) < 10 && std::abs(errorY) < 10) {
                     mouseClick();
+                    if (debugMode) std::cout << "click\n" << "error.x: "<< errorX << " error.y: " << errorY << "two conditions:" << std::abs(errorX) << " " << std::abs(errorY) << std::endl;
                     Sleep(1);
                 } 
             } else {
@@ -655,15 +667,15 @@ int main() {
 
         auto end = std::chrono::steady_clock::now();
         double elapsed = std::chrono::duration<double>(end - start).count();
-        double targetTime = 1.0 / 60.0;
-        if (elapsed < targetTime) Sleep((targetTime - elapsed) * 1000);
+        //double targetTime = 1.0 / 60.0;
+        //if (elapsed < targetTime) Sleep((targetTime - elapsed) * 1000);
         double dt_actual = elapsed;
         if (dt_actual > 0 && dt_actual < 0.1) { pidx.dt = dt_actual; pidy.dt = dt_actual; }
         frameCounter++;
-        if (debugMode) {
-            std:: cout << "Frame time: " << elapsed * 1000 << " ms" << std::endl;
-            std::cout << "Frame: " << frameCounter << std::endl;
-        }
+        //if (debugMode) {
+        //    std:: cout << "Frame time: " << elapsed * 1000 << " ms" << std::endl;
+        //    std::cout << "Frame: " << frameCounter << std::endl;
+        //}
     } while (running);
 
     cv::destroyAllWindows();
