@@ -58,7 +58,7 @@ void moveMouseRelative(int dx, int dy) {
 }
 
 void mouseClick() {
-    //std::cout << "Click!\n";
+    std::cout << "Click! in function\n";
     INPUT input{0};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
@@ -66,7 +66,7 @@ void mouseClick() {
     Sleep(20);
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(INPUT));
-    
+    std::cout << "Click! out function\n";
 
 }
 
@@ -538,8 +538,8 @@ int main() {
                 mousePos.y = 0.5 * (winRect.top + winRect.bottom);
             }
 
-            double errorX = (mousePos.x - target.x)/judge;
-            double errorY = (mousePos.y - target.y)/judge;
+            double errorX = (mousePos.x - target.x);
+            double errorY = (mousePos.y - target.y);
 
             if (debugMode && frameCounter % 60 == 0) {
                 std::cout << "Mouse: (" << mousePos.x << "," << mousePos.y << ")  TargetScreen: (" << targetScreenX << "," << targetScreenY << ")" << std::endl;
@@ -549,8 +549,8 @@ int main() {
 
             
             if (std::abs(errorX) < 50000 && std::abs(errorY) < 50000) {
-                double moveX = pidx.update(0, errorX);
-                double moveY = pidy.update(0, errorY);
+                double moveX = pidx.update(0, errorX)/judge;
+                double moveY = pidy.update(0, errorY)/judge;
                 //const int MAX_MOVE = 25;
                 //if (moveX > MAX_MOVE) moveX = MAX_MOVE;
                 //if (moveX < -MAX_MOVE) moveX = -MAX_MOVE;
@@ -558,8 +558,8 @@ int main() {
                 //if (moveY < -MAX_MOVE) moveY = -MAX_MOVE;
                 moveMouseRelative((int)moveX, (int)moveY);
                 if (debugMode && frameCounter % 60 == 0) {
-                    std::cout << "move.x: "<<moveX << std::endl;
-                    std::cout << "move.y: "<<moveY << std::endl;
+                    std::cout << "move.x: "<<moveX << "with judge: ÷"<<judge<<std::endl;
+                    std::cout << "move.y: "<<moveY << "with judge: ÷"<<judge<<std::endl;
                 }
                 if (autoShoot && std::abs(errorX) < 10 && std::abs(errorY) < 10) {
                     mouseClick();
