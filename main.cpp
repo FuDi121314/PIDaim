@@ -58,15 +58,13 @@ void moveMouseRelative(int dx, int dy) {
 }
 
 void mouseClick() {
-    std::cout << "Click! in function\n";
     INPUT input{0};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
     SendInput(1, &input, sizeof(INPUT));
-    Sleep(20);
+    Sleep(10);
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(INPUT));
-    std::cout << "Click! out function\n";
 
 }
 
@@ -135,7 +133,13 @@ cv::Point findtg(const cv::Mat& frame) {
     return cv::Point(cx, cy);
 }
 
-std::vector<cv::Point> findAllTargets(const cv::Mat& frame) {
+
+struct TargetInfo {
+    cv::Point center;
+    cv::Rect  boundingBox;
+};
+
+std::vector<TargetInfo> findAllTargets(const cv::Mat& frame) {
     cv::Mat mask;
     cv::inRange(frame, cv::Scalar(0, 0, 200), cv::Scalar(50, 50, 255), mask);
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5,5));
@@ -145,7 +149,7 @@ std::vector<cv::Point> findAllTargets(const cv::Mat& frame) {
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    std::vector<cv::Point> centers;
+    std::vector<TargetInfo> targets;
     for (const auto& contour : contours) {
         cv::Moments m = cv::moments(contour);
         if (m.m00 == 0) continue;
@@ -154,9 +158,12 @@ std::vector<cv::Point> findAllTargets(const cv::Mat& frame) {
         // Ignore points too close to the border (optional)
         if (cx < 10 || cy < 10 || cx > frame.cols - 10 || cy > frame.rows - 10)
             continue;
-        centers.push_back(cv::Point(cx, cy));
+        TargetInfo info;
+        info.center = cv::Point(cx, cy);
+        info.boundingBox = cv::boundingRect(contour);
+        targets.push_back(info);
     }
-    return centers;
+    return targets;
 }
 
 // Save/Load config
@@ -378,6 +385,7 @@ int main() {
     bool fixmouse = false;      // fixmouse at center of window
 
     cv::Point lockedTarget(-1, -1);
+    cv::Rect  lockedRect;               // bounding box of locked target
     bool hasLock = false;
     int lostCounter = 0;
     const int LOST_THRESHOLD = 15;          // frames before unlocking
@@ -449,8 +457,8 @@ int main() {
         bool targetFound = (target.x != -1 && target.y != -1);
         */
 
-        std::vector<cv::Point> candidates = findAllTargets(frame);
-        cv::Point currentTarget(-1, -1);
+        std::vector<TargetInfo> candidates = findAllTargets(frame);
+        TargetInfo currentTargetInfo;   
         bool targetFound = false;
 
         if (!candidates.empty()) {
@@ -459,27 +467,29 @@ int main() {
                 // ***** pick the one closest to the screen center
                 cv::Point center(frame.cols / 2, frame.rows / 2);
                 auto it = std::min_element(candidates.begin(), candidates.end(),
-                    [&center](const cv::Point& a, const cv::Point& b) {
-                        return cv::norm(a - center) < cv::norm(b - center);
+                    [&center](const TargetInfo& a, const TargetInfo& b) {
+                        return cv::norm(a.center - center) < cv::norm(b.center - center);
                     });
-                lockedTarget = *it;
+                lockedTarget = it->center;
+                lockedRect   = it->boundingBox;
                 hasLock = true;
                 lostCounter = 0;
-                currentTarget = lockedTarget;
+                currentTargetInfo = *it;
                 targetFound = true;
             } 
             else {
                 // *** Locked: find the candidate closest to lockedTarget 
                 auto it = std::min_element(candidates.begin(), candidates.end(),
-                    [&](const cv::Point& a, const cv::Point& b) {
-                        return cv::norm(a - lockedTarget) < cv::norm(b - lockedTarget);
+                    [&](const TargetInfo& a, const TargetInfo& b) {
+                        return cv::norm(a.center - lockedTarget) < cv::norm(b.center - lockedTarget);
                     });
-                float dist = cv::norm(*it - lockedTarget);
+                float dist = cv::norm(it->center - lockedTarget);
                 if (dist < DIST_THRESHOLD) {
                     // Target still visible, update lock position
-                    lockedTarget = *it;
+                    lockedTarget = it->center;
+                    lockedRect   = it->boundingBox;
                     lostCounter = 0;
-                    currentTarget = lockedTarget;
+                    currentTargetInfo = *it;
                     targetFound = true;
                 } 
                 else {
@@ -513,7 +523,7 @@ int main() {
                 }*/
             }
         }
-        cv::Point target = currentTarget;
+        cv::Point target = currentTargetInfo.center;   // for drawing and legacy
 
         // Debug output
         if (debugMode && frameCounter % 60 == 0) {
@@ -538,8 +548,8 @@ int main() {
                 mousePos.y = 0.5 * (winRect.top + winRect.bottom);
             }
 
-            double errorX = (mousePos.x - target.x);
-            double errorY = (mousePos.y - target.y);
+            double errorX = mousePos.x - targetScreenX;
+            double errorY = mousePos.y - targetScreenY;
 
             if (debugMode && frameCounter % 60 == 0) {
                 std::cout << "Mouse: (" << mousePos.x << "," << mousePos.y << ")  TargetScreen: (" << targetScreenX << "," << targetScreenY << ")" << std::endl;
@@ -561,7 +571,8 @@ int main() {
                     std::cout << "move.x: "<<moveX << "with judge: ÷"<<judge<<std::endl;
                     std::cout << "move.y: "<<moveY << "with judge: ÷"<<judge<<std::endl;
                 }
-                if (autoShoot && std::abs(errorX) < 10 && std::abs(errorY) < 10) {
+
+                if (autoShoot && std::abs(errorX) < int(lockedRect.width/2) && std::abs(errorY) < int(lockedRect.height/2)) {
                     mouseClick();
                     if (debugMode) std::cout << "click\n" << "error.x: "<< errorX << " error.y: " << errorY << "two conditions:" << std::abs(errorX) << " " << std::abs(errorY) << std::endl;
                     Sleep(1);
