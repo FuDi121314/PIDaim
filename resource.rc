@@ -1,6 +1,6 @@
 #include "resource.h"
 #include <windows.h>
- 
+
 IDD_WINDOW_SELECT DIALOGEX 0, 0, 320, 210
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Select a Window"
