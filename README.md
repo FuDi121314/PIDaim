@@ -49,6 +49,4 @@ or you can goto "/sample/demo.mp4" to see.
 
 
 ## customize 
-1) you can change the windows captured
-2) fix the mousePos.x & mousePos.y as center for persanal used
-3) try adjust the PID 
+1) try adjust the PID 
